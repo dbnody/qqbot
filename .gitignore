@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+data/*.db
+data/*
+logs/
+.pytest_cache/
+*.log
+*.db
+*.zip
+plugins/**/cp_history.json
+plugins/**/__pycache__/

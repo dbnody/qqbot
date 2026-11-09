@@ -117,6 +117,21 @@ AI 使用规则：
 /清除记忆             清空当前会话记忆
 ```
 
+### 记忆星图
+
+```text
+/记忆星图              # 把事实库画成星图（PNG）
+/记忆星图 过程         # 圆环 → 连线 → 满天星 的阶段动画（GIF）
+```
+
+实现见 `app/starmap.py`：每个会话的事实按时间排成一个圆环、摘要当圆心，
+相似度沿用 2-gram 余弦，从圆环坐标出发跑力导向，锚点逐渐松开，最后聚成几团星云。
+纯本地计算，不调 API，不花 token。命令行等价物：
+
+```powershell
+python tools/memory_star.py --gif
+```
+
 内置人设定义在 `app/persona.py`；自己蒸馏出来的人设放 `data/personas/*.json`，每次调用实时读取，**加新文件不用重启**。
 
 ### 语音
@@ -330,7 +345,7 @@ OneBot V11 | Bot <QQ号> connected
 - 每个功能优先放入独立的 `plugins/<功能名>/__init__.py`；
 - 本地脚本放 `tools/`，例如 `python tools/loadcheck.py` 检查插件能否加载、
   `python tools/selfcheck.py` 做配置自检、`python tools/fetch_stickers.py` 同步表情包、
-  `python tools/simulate_voice.py` 跑语音回归；
+  `python tools/simulate_voice.py` 跑语音回归、`python tools/memory_star.py` 出记忆星图；
 - 文件下载、图片渲染和视频处理完成后删除临时文件；
 - 不在代码中硬编码 API Key；
 - 新插件应使用独立 matcher，避免拦截其他插件事件；

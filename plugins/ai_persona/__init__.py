@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from nonebot import on_command
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageEvent, MessageSegment
 from nonebot.params import CommandArg
 
-from app import stickers
+from app import starmap, stickers
 from app.sticker_fetch import sync
 from app.memory import memory_overview
 from app.persona import all_personas, get_persona, persona_help, select_persona, set_custom_persona
@@ -123,3 +124,16 @@ async def handle_find_sticker(args=CommandArg()) -> None:
         await find_sticker_command.finish("没有需要补的，或者网络不通。")
     detail = "、".join(f"{name}+{count}" for name, count in added.items())
     await find_sticker_command.finish(f"同步完成：新增 {total} 张（{detail}）")
+
+starmap_command = on_command("记忆星图", aliases={"星图", "记忆图谱"}, priority=5, block=True)
+
+
+@starmap_command.handle()
+async def handle_starmap(event: MessageEvent, args=CommandArg()) -> None:
+    want_gif = args.extract_plain_text().strip() in {"过程", "动画", "gif", "GIF"}
+    await starmap_command.send("正在画记忆星图…")
+    path = await asyncio.to_thread(starmap.render, None, gif=want_gif, scope=_scope(event))
+    if path is None:
+        await starmap_command.finish("还没有可画的记忆，先聊几轮攒点事实吧。")
+    image = path.with_suffix(".gif") if want_gif else path
+    await starmap_command.finish(MessageSegment.image(image.resolve().as_uri()))

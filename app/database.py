@@ -85,5 +85,35 @@ def init_database() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_ai_memories_scope_time
                 ON ai_memories (scope_id, id);
+
+            CREATE TABLE IF NOT EXISTS ai_personas (
+                scope_id TEXT PRIMARY KEY,
+                persona_key TEXT NOT NULL DEFAULT '',
+                custom_prompt TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_summaries (
+                scope_id TEXT PRIMARY KEY,
+                summary TEXT NOT NULL DEFAULT '',
+                upto_id INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_facts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_ai_facts_scope_id
+                ON ai_facts (scope_id, id);
+
+            CREATE TABLE IF NOT EXISTS ai_voice_modes (
+                scope_id TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )

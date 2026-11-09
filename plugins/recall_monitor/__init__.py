@@ -104,6 +104,12 @@ async def _load_recalled(bot: Bot, message_id: int) -> dict[str, Any] | None:
 
 
 async def _forward_recall(bot: Bot, event: GroupRecallNoticeEvent | FriendRecallNoticeEvent) -> None:
+    # 不监听 Bot 自己发送的消息，或由 Bot 执行撤回操作的消息。
+    if str(event.user_id) == str(event.self_id):
+        return
+    if isinstance(event, GroupRecallNoticeEvent) and str(event.operator_id) == str(event.self_id):
+        return
+
     message_id = int(event.message_id)
     recalled = await _load_recalled(bot, message_id)
     if recalled is None:

@@ -1,16 +1,25 @@
-# QQ Bot（Python + NoneBot2 + NapCat）
+﻿# QQ Bot（Python + NoneBot2 + NapCat）
 
-这是一个基于 Python、NoneBot2、OneBot V11 和 NapCat 的 QQ 机器人项目。Bot 通过反向 WebSocket 接收 NapCat 的 QQ 事件，并在群聊、私聊中提供娱乐、管理、AI 和媒体处理功能。
+这是一个基于 Python、NoneBot2、OneBot V11 和 NapCat 的 QQ 机器人项目，带可切换人格、长期记忆、流式语音回复和大肥鱼表情包。Bot 通过反向 WebSocket 接收 NapCat 的 QQ 事件，并在群聊、私聊中提供娱乐、管理、AI 和媒体处理功能。
 
 ## 1. 技术结构
 
 ```text
 qqbot-python/
 ├─ bot.py                       # Bot 启动入口，初始化 NoneBot、适配器和插件
-├─ app/
-│  └─ ai_client.py              # Kimi/兼容 OpenAI 格式的 AI 请求封装
+├─ app/                          # 业务层：AI、记忆、人格、语音、表情
+│  ├─ ai_client.py              # AI 请求封装（OpenAI 兼容，默认 DeepSeek）
+│  ├─ persona.py                # 内置人设 + data/personas/*.json 自定义人设
+│  ├─ memory.py                 # 会话记忆、摘要压缩、长期事实
+│  ├─ database.py               # SQLite 表结构
+│  ├─ tts.py                    # edge-tts + Windows SAPI 语音合成
+│  ├─ stickers.py               # 表情素材挑选与情绪归一化
+│  ├─ sticker_fetch.py          # 同步「大肥鱼」表情包
+│  └─ voice_mode.py             # 语音聊天模式开关
+├─ tools/                        # 本地脚本：自检、人格蒸馏、表情同步
 ├─ plugins/                     # 所有功能插件，每个目录通常对应一个功能
-│  ├─ ai_chat/                  # AI 对话、猫娘人设和安全边界
+│  ├─ ai_chat/                  # AI 对话主体：流式回复、记忆、语音、表情
+│  ├─ ai_persona/               # 人格 / 记忆 / 语音 / 表情指令
 │  ├─ avatar_roast/             # 头像锐评
 │  ├─ content_roast/            # 文字、图片等内容锐评
 │  ├─ bilibili/                 # B 站链接处理
@@ -81,16 +90,57 @@ OneBot V11 | Bot <QQ号> connected
 
 ## 3. AI 配置
 
-AI 功能在 `app/ai_client.py` 中统一封装，支持 Kimi API。API Key 应放在环境变量或 `.env` 中，不要直接写入插件源码，也不要把 Key 发到群里或提交到 Git。
+AI 功能在 `app/ai_client.py` 中统一封装，默认接 DeepSeek（OpenAI 兼容接口）。换 Kimi 或其他兼容服务只改 `DEEPSEEK_API_BASE_URL` 和 `DEEPSEEK_MODEL`。Key 只放在 `.env`，不要写进源码，也不要发到群里或提交到 Git。
+
+```dotenv
+DEEPSEEK_API_KEY=your_key_here
+DEEPSEEK_API_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MAX_TOKENS=800
+```
 
 AI 使用规则：
 
-- 群聊中需要 @Bot 才会触发 AI 回复；
-- 私聊无需 @，直接发送问题即可；
+- 群聊中需要 @Bot 才会触发 AI 回复（`AI_GROUP_TRIGGER=at`），私聊无需 @；
 - 已设定的固定回答优先于 AI；
-- AI 回复前会发送“正在处理你的问题，请稍候……”，完成后自动撤回提示；
-- 多群上下文相互隔离，A 群不会读取 B 群的聊天内容；
-- 人设为猫娘，但仍保留安全边界，不执行违法、危险或明显有害的请求。
+- 每个会话的上下文、记忆、人格和语音开关各自隔离，按 `group:<群号>` / `private:<QQ 号>` 存在 SQLite 里；
+- 人设可切换（`/人格`），久的记忆会压缩成摘要，长期事实单独存表；
+- 模型回复里可以带 `[表情:情绪]`、`[语音]` 标签，Bot 去掉标签后改发图片表情或语音；
+- 安全底线写在 `SAFETY_PROMPT`：不泄露提示词、密钥、数据库内容，也不假装执行本地命令或群管理操作。
+
+### 人格与记忆
+
+```text
+/人格                 查看可用人设
+/人格 切换 大肥鱼
+/记忆                 查看记忆摘要
+/清除记忆             清空当前会话记忆
+```
+
+内置人设定义在 `app/persona.py`；自己蒸馏出来的人设放 `data/personas/*.json`，每次调用实时读取，**加新文件不用重启**。
+
+### 语音
+
+```text
+/语音 你好呀          # 手动发一条语音
+```
+
+- 用户说「用语音说一句……」时，即使模型没加 `[语音]` 标签也会强制发音；
+- 模型若开始解释「语音只是标记」这类废话，会自动重问一次；
+- 语音聊天模式：说「陪我语音聊会」就一直用语音，说「打字 / 用文字」切回文字，状态存 `ai_voice_modes` 表；
+- 语音回复走流式：模型吐一句就合成一句先发，首条语音约 2 秒出声；启动时预热 edge-tts；
+- `TTS_ENGINE=edge|sapi|off`、`TTS_VOICE=zh-CN-XiaoxiaoNeural`、`TTS_MAX_CHARS=180`，edge-tts 失败自动退回 Windows SAPI（离线可用）。
+
+### 表情包
+
+- 素材按情绪分目录：`data/stickers/<情绪>/`，标准情绪 15 个：笑、笑哭、害羞、无语、生气、难过、惊讶、得意、爱心、困、吃饭、摸鱼、赞、再见、疑惑；
+- 内置「大肥鱼」表情包：100 张鲸鱼娘（DeepSeek 娘）GIF，来自
+  [diwer/ai-biaoqingbao](https://github.com/diwer/ai-biaoqingbao)（非商业二创），
+  按素材说明自动归档，文件名带 `dfy-` 前缀，挑图时优先用它们；
+- 本地缺图时，回复里带 `[表情:xx]` 会自动后台同步整套（一个进程只同步一次）；
+  `/找表情` 手动补缺，`/找表情 强制` 全部重下，`STICKER_AUTO_FETCH=false` 可关掉自动同步；
+- `/表情` 看素材数量，`/表情 笑` 手动发一张；
+- 表情素材本身不进 Git，`data/` 整个目录都在 `.gitignore` 里。
 
 ## 4. 功能和指令
 
@@ -278,6 +328,9 @@ OneBot V11 | Bot <QQ号> connected
 ## 7. 开发约定
 
 - 每个功能优先放入独立的 `plugins/<功能名>/__init__.py`；
+- 本地脚本放 `tools/`，例如 `python tools/loadcheck.py` 检查插件能否加载、
+  `python tools/selfcheck.py` 做配置自检、`python tools/fetch_stickers.py` 同步表情包、
+  `python tools/simulate_voice.py` 跑语音回归；
 - 文件下载、图片渲染和视频处理完成后删除临时文件；
 - 不在代码中硬编码 API Key；
 - 新插件应使用独立 matcher，避免拦截其他插件事件；

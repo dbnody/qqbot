@@ -17,9 +17,15 @@ from app.avatar import AvatarError, download_avatar, download_image
 roast_command = on_command("锐评", aliases={"评价", "吐槽"}, priority=10, block=True)
 ROAST_PROMPT = (
     "请进行一段语言尖刀式、机智幽默、略带毒舌但有分寸的锐评。"
-    "重点评价内容本身或图片中的构图、色彩、光线、风格和氛围，避免恶意攻击真实个人。"
+    "重点评价输入内容本身；只有在确实提供图片时，才评价图片中的构图、色彩、光线、风格和氛围。"
     "不要推断年龄、健康、种族、身份、性取向、政治立场等敏感属性，不要编造看不到的信息。"
     "控制在 120 字以内，像一个有幽默感的朋友吐槽，最后可以给一句简短建议。"
+)
+
+TEXT_ONLY_ROAST_PROMPT = (
+    "本次输入是纯文字，不存在图片。只评价文字中的观点、逻辑、表达方式、情绪和内容效果。"
+    "严禁提及或臆测构图、画面、色彩、光线、镜头、姿势、视觉风格、背景等图片相关内容，"
+    "也不要写‘从图中可以看出’之类的句子。"
 )
 
 
@@ -94,8 +100,11 @@ async def handle_roast(bot: Bot, event: MessageEvent, args=CommandArg()) -> None
             notice_id = _message_id(await roast_command.send("正在准备锐评，请稍候……"))
         except Exception:
             notice_id = None
+        prompt = ROAST_PROMPT
+        if image_path is None:
+            prompt += TEXT_ONLY_ROAST_PROMPT
         answer = await ask_ai(
-            ROAST_PROMPT + "\n待锐评内容：" + question,
+            prompt + "\n待锐评内容：" + question,
             display_name,
             image_path=str(image_path) if image_path else None,
         )

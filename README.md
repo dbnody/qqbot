@@ -257,6 +257,10 @@ python tools/memory_star.py --gif
 
 当前模板包括：哭泣猫猫、完美、神图、PornHub 标题图、举牌小人、熊猫人、狗头、震惊、经典和彩虹。生成图片发送后会自动删除临时文件。
 
+画法统一在 900×650 的逻辑坐标里完成，内部按 2 倍超采样再缩回去，所以线条没有锯齿；背景用径向/线性渐变、
+柔光和高光点缀，不再套一圈硬边框。想看效果不用发 QQ：`python tools/meme_preview.py <输出目录>` 会把十个模板
+一次画出来，`python tools/test_meme.py` 做尺寸和画面非空的回归。
+
 Meme 功能依赖 Pillow：
 
 ```powershell
@@ -363,7 +367,7 @@ OneBot V11 | Bot <QQ号> connected
   `python tools/selfcheck.py` 做配置自检、`python tools/fetch_stickers.py` 同步表情包、
   `python tools/simulate_voice.py` 跑语音回归、`python tools/memory_star.py` 出记忆星图、
   `python tools/test_starmap.py` / `python tools/test_safety.py` 跑星图与权限、底线的回归、
-  `python tools/test_guard.py` 跑红线兜底的关键词规则；
+  `python tools/test_guard.py` 跑红线兜底的关键词规则、`python tools/test_meme.py` 跑梗图回归；
 - 权限判断用 `plugins/ai_persona` 里的 `can_manage(event)`：私聊放行，群里认群主/管理员和配置的管理员；
 - 文件下载、图片渲染和视频处理完成后删除临时文件；
 - 不在代码中硬编码 API Key；

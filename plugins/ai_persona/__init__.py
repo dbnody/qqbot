@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
-from nonebot import on_command
+from nonebot import get_driver, on_command
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageEvent, MessageSegment
 from nonebot.params import CommandArg
 
@@ -20,6 +21,17 @@ def _scope(event: MessageEvent) -> str:
     if isinstance(event, GroupMessageEvent):
         return f"group:{event.group_id}"
     return f"private:{event.user_id}"
+
+
+def can_manage(event: MessageEvent) -> bool:
+    """会作用于整个会话的操作（画星图、改群人格）：群里只给群主/管理或配置的管理员，私聊不限。"""
+    if not isinstance(event, GroupMessageEvent):
+        return True
+    if getattr(event.sender, "role", "") in {"admin", "owner"}:
+        return True
+    ids = {item.strip() for item in os.getenv("QQBOT_ADMIN_IDS", "").split(",") if item.strip().isdigit()}
+    ids.update(str(item) for item in getattr(get_driver().config, "superusers", set()) if str(item).isdigit())
+    return str(event.user_id) in ids
 
 
 def _match_persona(text: str):
@@ -54,6 +66,8 @@ async def handle_persona(event: MessageEvent, args=CommandArg()) -> None:
         description = text[3:].strip(" ：:") if text.startswith("自定义") else text[6:].strip(" ：:")
         if len(description) < 4:
             await persona_command.finish("用法：/人格 自定义 一个爱讲冷笑话的东北大叔")
+        if not can_manage(event):
+            await persona_command.finish("改人格会作用到整个群，只有群主和管理员能改；私聊里你想演谁都可以。")
         persona = set_custom_persona(scope, description)
         await persona_command.finish(f"好，从现在起我演这个角色：{persona.prompt[:60]}……")
 
@@ -131,6 +145,8 @@ starmap_command = on_command("记忆星图", aliases={"星图", "记忆图谱"},
 @starmap_command.handle()
 async def handle_starmap(event: MessageEvent, args=CommandArg()) -> None:
     want_gif = args.extract_plain_text().strip() in {"过程", "动画", "gif", "GIF"}
+    if not can_manage(event):
+        await starmap_command.finish("星图里有群里各人的聊天细节，只有群主和管理员能看哦。")
     await starmap_command.send("正在画记忆星图…")
     path = await asyncio.to_thread(starmap.render, None, gif=want_gif, scope=_scope(event))
     if path is None:

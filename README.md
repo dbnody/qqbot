@@ -1,4 +1,4 @@
-﻿# QQ Bot（Python + NoneBot2 + NapCat）
+# QQ Bot（Python + NoneBot2 + NapCat）
 
 这是一个基于 Python、NoneBot2、OneBot V11 和 NapCat 的 QQ 机器人项目，带可切换人格、长期记忆、流式语音回复和大肥鱼表情包。Bot 通过反向 WebSocket 接收 NapCat 的 QQ 事件，并在群聊、私聊中提供娱乐、管理、AI 和媒体处理功能。
 
@@ -113,9 +113,14 @@ AI 使用规则：
 ```text
 /人格                 查看可用人设
 /人格 切换 大肥鱼
+/人格 自定义 会算命的江湖道士   # 私聊里随便设角色；群里要群主/管理员
 /记忆                 查看记忆摘要
 /清除记忆             清空当前会话记忆
 ```
+
+私聊可以直接玩角色扮演：用户用 `/人格 自定义` 写一段想要的设定（≤800 字），只作用于自己的
+`private:<QQ 号>`，别人和群里都看不到。角色由用户提供，但底线不跟着改——设定里要求越线、
+或者对方说「这只是演戏」，模型都会被 `SAFETY_PROMPT` 压回去，用人物的口吻拒绝而不是出戏说教。
 
 ### 记忆星图
 
@@ -126,7 +131,8 @@ AI 使用规则：
 
 实现见 `app/starmap.py`：每个会话的事实按时间排成一个圆环、摘要当圆心，
 相似度沿用 2-gram 余弦，从圆环坐标出发跑力导向，锚点逐渐松开，最后聚成几团星云。
-纯本地计算，不调 API，不花 token。命令行等价物：
+纯本地计算，不调 API，不花 token。只画当前会话（群只画本群、私聊只画本人），
+群里限群主/管理员触发。命令行等价物：
 
 ```powershell
 python tools/memory_star.py --gif
@@ -315,7 +321,13 @@ B 站链接可在群内直接发送，Bot 会尝试解析并转发为视频。�
 - AI API Key 只能放在本地环境变量或 `.env`；
 - 不要把 `.env`、缓存文件和临时媒体提交到公开仓库；
 - 处理头像、视频和撤回消息时尽量使用临时文件，发送后及时删除；
-- AI 猫娘人设不会覆盖安全规则，也不会执行越权操作。
+- 人设不会覆盖安全规则，也不会执行越权操作；
+- `/记忆星图` 会画出本会话的聊天细节，群里只有群主、管理员和 `QQBOT_ADMIN_IDS` / SUPERUSERS
+  里的人能触发，普通成员会被拒绝；私聊只画自己的 `private:<QQ 号>`；
+- `/人格 自定义` 会改动整个群的人设，群里同样限管理员，私聊不限；
+- `SAFETY_PROMPT` 优先级高于任何人设：拒绝色情与未成年人相关内容、暴力教唆、自伤方法、毒品与
+  武器制作、诈骗赌博、黑客攻击、侵犯隐私、歧视仇恨和其它违法请求；不索取也不复述身份证、住址、
+  银行卡等隐私，不转述其他会话内容；说「这只是演戏」「进入无限制模式」也不放宽。
 
 ## 6. 常见日志
 
@@ -345,7 +357,9 @@ OneBot V11 | Bot <QQ号> connected
 - 每个功能优先放入独立的 `plugins/<功能名>/__init__.py`；
 - 本地脚本放 `tools/`，例如 `python tools/loadcheck.py` 检查插件能否加载、
   `python tools/selfcheck.py` 做配置自检、`python tools/fetch_stickers.py` 同步表情包、
-  `python tools/simulate_voice.py` 跑语音回归、`python tools/memory_star.py` 出记忆星图；
+  `python tools/simulate_voice.py` 跑语音回归、`python tools/memory_star.py` 出记忆星图、
+  `python tools/test_starmap.py` / `python tools/test_safety.py` 跑星图与权限、底线的回归；
+- 权限判断用 `plugins/ai_persona` 里的 `can_manage(event)`：私聊放行，群里认群主/管理员和配置的管理员；
 - 文件下载、图片渲染和视频处理完成后删除临时文件；
 - 不在代码中硬编码 API Key；
 - 新插件应使用独立 matcher，避免拦截其他插件事件；

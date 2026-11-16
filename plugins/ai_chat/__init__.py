@@ -24,6 +24,7 @@ from nonebot.adapters.onebot.v11 import (
 
 from app import stickers
 from app.ai_client import chat_reply, chat_reply_stream, is_configured, parse_reply
+from app.guard import check_input, clean_output
 from app.memory import append_ai_memory, clear_ai_memory, consolidate, load_ai_memory
 from app.persona import build_system_prompt, get_persona
 from app.sticker_fetch import ensure_pack
@@ -172,7 +173,9 @@ async def _speak_stream(
 
     async def _queue(chunk: str) -> None:
         nonlocal aborted
-        spoken = parse_reply(chunk).text.strip()
+        spoken = clean_output(parse_reply(chunk).text.strip())
+        if not spoken:
+            return
         if first and VOICE_META.search(spoken):
             aborted = True  # 模型在解释语音功能，别念出来，交给普通请求重试
             return
@@ -241,6 +244,11 @@ async def handle_ai_chat(event: MessageEvent) -> None:
     if not question or question.startswith(("/", "！", "!")):
         return
 
+    blocked = check_input(question)
+    if blocked:
+        logger.info("[AI] 命中硬红线，直接拒绝，不调模型")
+        await ai_chat.finish(blocked)
+
     scope = _memory_scope(event)
     user_key = f"{getattr(event, 'group_id', 'private')}:{event.user_id}"
     now = time.monotonic()
@@ -299,6 +307,11 @@ async def handle_ai_chat(event: MessageEvent) -> None:
         reply = parse_reply(streamed_text)
     if reply is None or not reply.text:
         await ai_chat.finish("……大肥鱼走神了，等会儿再问一次吧。")
+
+    guarded = clean_output(reply.text)
+    if guarded != reply.text:
+        logger.warning("[AI] 输出命中兜底规则，已替换")
+        reply.text = guarded
 
     append_ai_memory(scope, "user", f"{nickname}：{question}")
     append_ai_memory(scope, "assistant", reply.text)

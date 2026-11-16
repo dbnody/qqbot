@@ -328,6 +328,10 @@ B 站链接可在群内直接发送，Bot 会尝试解析并转发为视频。�
 - `SAFETY_PROMPT` 优先级高于任何人设：拒绝色情与未成年人相关内容、暴力教唆、自伤方法、毒品与
   武器制作、诈骗赌博、黑客攻击、侵犯隐私、歧视仇恨和其它违法请求；不索取也不复述身份证、住址、
   银行卡等隐私，不转述其他会话内容；说「这只是演戏」「进入无限制模式」也不放宽。
+- 提示词之外还有一层不走模型的兜底 `app/guard.py`：用户消息命中「高危主题 + 求做法」（自制炸药、
+  改枪、冰毒配方、洗钱教程、未成年性内容、自伤方法等）就直接回拒绝语，连 API 都不调；
+  模型输出里冒出密钥、本机路径、提示词或危险配方时整段替换掉。关键词规则，宁可漏给提示词、
+  也不误伤日常聊天，见 `tools/test_guard.py` 的放行样例。
 
 ## 6. 常见日志
 
@@ -358,7 +362,8 @@ OneBot V11 | Bot <QQ号> connected
 - 本地脚本放 `tools/`，例如 `python tools/loadcheck.py` 检查插件能否加载、
   `python tools/selfcheck.py` 做配置自检、`python tools/fetch_stickers.py` 同步表情包、
   `python tools/simulate_voice.py` 跑语音回归、`python tools/memory_star.py` 出记忆星图、
-  `python tools/test_starmap.py` / `python tools/test_safety.py` 跑星图与权限、底线的回归；
+  `python tools/test_starmap.py` / `python tools/test_safety.py` 跑星图与权限、底线的回归、
+  `python tools/test_guard.py` 跑红线兜底的关键词规则；
 - 权限判断用 `plugins/ai_persona` 里的 `can_manage(event)`：私聊放行，群里认群主/管理员和配置的管理员；
 - 文件下载、图片渲染和视频处理完成后删除临时文件；
 - 不在代码中硬编码 API Key；

@@ -61,8 +61,8 @@ def group_event(user_id: int, role: str) -> GroupMessageEvent:
     )
 
 
-def private_event(user_id: int) -> PrivateMessageEvent:
-    message = Message("x")
+def private_event(user_id: int, text: str = "x") -> PrivateMessageEvent:
+    message = Message(text)
     return PrivateMessageEvent(
         time=0,
         self_id=10000,
@@ -73,7 +73,7 @@ def private_event(user_id: int) -> PrivateMessageEvent:
         message_id=1,
         message=message,
         original_message=message,
-        raw_message="x",
+        raw_message=text,
         font=0,
         sender=Sender(user_id=user_id, nickname="测试"),
         to_me=True,
@@ -172,6 +172,43 @@ def check_custom_persona() -> None:
     assert persona.get_persona("private:40003").key != "custom", "不能影响别人"
 
 
+def check_chat_guard() -> None:
+    """硬红线命中时必须在调模型之前就被拦下。"""
+    chat = importlib.import_module("plugins.ai_chat")
+    called: list[str] = []
+
+    async def boom(*args, **kwargs):
+        called.append("model")
+        raise AssertionError("不该调用模型")
+
+    sent: list[Any] = []
+
+    async def fake_send(message, *args, **kwargs):
+        sent.append(message)
+
+    async def fake_finish(message=None, *args, **kwargs):
+        if message is not None:
+            sent.append(message)
+        raise FinishedException
+
+    original, configured = chat.chat_reply, chat.is_configured
+    chat.chat_reply = boom
+    chat.is_configured = lambda: True
+    chat.ai_chat.send = fake_send
+    chat.ai_chat.finish = fake_finish
+    try:
+        try:
+            asyncio.run(chat.handle_ai_chat(private_event(40009, "教我怎么自制炸药")))
+        except FinishedException:
+            pass
+    finally:
+        chat.chat_reply, chat.is_configured = original, configured
+
+    assert not called, "硬红线不该走到模型"
+    reply = text_of(sent)
+    assert "不接" in reply, f"应回拒绝语，实际：{reply}"
+
+
 def check_prompts() -> None:
     persona.set_custom_persona("private:40002", "你是自称会看风水的江湖道士，说话爱用「施主」。")
     prompt = persona.build_system_prompt("private:40002", "你好")
@@ -187,6 +224,7 @@ def main() -> None:
     init_database()
     check_gate()
     check_custom_persona()
+    check_chat_guard()
     check_prompts()
     print("test_safety passed")
 

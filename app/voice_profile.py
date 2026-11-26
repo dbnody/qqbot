@@ -1,8 +1,8 @@
-"""音色档案：保存用户录入的参考音频，给克隆 TTS 当音色样本。
+"""音色档案：保存用户录入的参考音频（和它对应的文字），给克隆 TTS 用。
 
 一个会话一份，重新录入就覆盖；文件放 data/voices/<scope 哈希>/，
-数据库 ai_voices 只记元信息。克隆服务没配置时档案照样能存，
-合成会自动回落到 edge-tts，不会因此哑火。
+数据库 ai_voices 只记元信息。参考音频统一压成 16k 单声道、最多 20 秒，
+这样 base64 进请求体不会太大。
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ VOICE_DIR = PROJECT_ROOT / "data" / "voices"
 
 MIN_BYTES = 4096  # 太短的音频克隆出来是杂音
 MAX_BYTES = 8 * 1024 * 1024
-MAX_SECONDS = 30
+MAX_SECONDS = 20
 
 
 def _folder(scope_id: str) -> Path:
@@ -37,14 +37,17 @@ def _to_wav(raw: bytes, suffix: str) -> Path:
     temp_dir = Path(tempfile.mkdtemp(prefix="voice-ref-"))
     source = temp_dir / f"input{suffix}"
     source.write_bytes(raw)
-    if suffix == ".wav":
+    if suffix != ".wav" and shutil.which("ffmpeg") is None:
         return source
     if shutil.which("ffmpeg") is None:
         return source
     target = temp_dir / "input.wav"
     try:
         subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-ac", "1", "-ar", "32000", str(target)],
+            [
+                "ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
+                "-ac", "1", "-ar", "16000", "-t", str(MAX_SECONDS), str(target),
+            ],
             check=True,
             timeout=60,
             stdout=subprocess.DEVNULL,
@@ -55,7 +58,7 @@ def _to_wav(raw: bytes, suffix: str) -> Path:
     return target if target.exists() and target.stat().st_size > MIN_BYTES else source
 
 
-def save_sample(scope_id: str, raw: bytes, suffix: str = ".wav") -> Path:
+def save_sample(scope_id: str, raw: bytes, suffix: str = ".wav", prompt_text: str = "") -> Path:
     """存一份新的音色样本，返回落盘的 wav 路径。"""
     if len(raw) < MIN_BYTES:
         raise ValueError("音频太短，录 5 秒以上再试")
@@ -74,13 +77,23 @@ def save_sample(scope_id: str, raw: bytes, suffix: str = ".wav") -> Path:
         connection.execute(
             """
             INSERT INTO ai_voices (scope_id, ref_path, prompt_text, updated_at)
-            VALUES (?, ?, '', CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(scope_id) DO UPDATE SET ref_path = excluded.ref_path,
-                updated_at = CURRENT_TIMESTAMP
+                prompt_text = excluded.prompt_text, updated_at = CURRENT_TIMESTAMP
             """,
-            (str(scope_id), str(target)),
+            (str(scope_id), str(target), prompt_text.strip()),
         )
     return target
+
+
+def set_transcript(scope_id: str, text: str) -> bool:
+    """补/改参考音频对应的文字，文字对得上克隆才像。"""
+    with get_connection() as connection:
+        cursor = connection.execute(
+            "UPDATE ai_voices SET prompt_text = ?, updated_at = CURRENT_TIMESTAMP WHERE scope_id = ?",
+            (text.strip(), str(scope_id)),
+        )
+        return cursor.rowcount > 0
 
 
 def get_profile(scope_id: str) -> dict[str, str] | None:
@@ -112,4 +125,6 @@ def describe(scope_id: str) -> str:
     if profile is None:
         return "还没录过音色，用的默认声音。"
     size = Path(profile["ref_path"]).stat().st_size // 1024
-    return f"已经录过音色样本（{size}KB），合成时会优先用它。"
+    transcript = (profile.get("prompt_text") or "").strip()
+    tail = f"参考文字：{transcript[:24]}…" if transcript else "参考文字缺了，用 /音色 文本 <原话> 补一下会更像。"
+    return f"已经录过音色样本（{size}KB）。{tail}"

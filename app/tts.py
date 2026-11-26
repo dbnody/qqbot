@@ -114,14 +114,29 @@ async def warmup() -> None:
         logger.debug(f"[TTS] 预热失败：{type(exc).__name__}")
 
 
-async def synthesize(text: str, voice: str | None = None) -> Path | None:
-    """把文本合成为语音文件；关闭或失败时返回 None。"""
+async def synthesize(text: str, voice: str | None = None, scope: str | None = None) -> Path | None:
+    """把文本合成为语音文件；关闭或失败时返回 None。
+
+    传了 scope 且这个会话录过音色样本时，优先走克隆合成，失败再回落。
+    """
     if not _enabled():
         return None
     spoken = clean_text(text)
     if len(spoken) < 2:
         return None
     voice = voice or default_voice()
+
+    if scope:
+        from app.clone_tts import synthesize_clone
+        from app.voice_profile import get_profile
+
+        profile = get_profile(scope)
+        if profile is not None:
+            cloned = await synthesize_clone(spoken, profile)
+            if cloned is not None:
+                return cloned
+            logger.info("[TTS] 克隆不可用，回落到普通语音")
+
     key = hashlib.sha1(f"{voice}|{spoken}".encode()).hexdigest()[:16]
     engine = _engine()
     _cleanup()

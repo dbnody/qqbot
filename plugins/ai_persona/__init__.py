@@ -95,7 +95,7 @@ async def handle_voice(event: MessageEvent, args=CommandArg()) -> None:
     text = args.extract_plain_text().strip()
     if not text:
         await voice_command.finish("用法：/语音 要读出来的那句话")
-    audio = await synthesize(text, get_persona(_scope(event)).voice)
+    audio = await synthesize(text, get_persona(_scope(event)).voice, _scope(event))
     if audio is None:
         await voice_command.finish("语音合成失败了，检查一下 edge-tts 安装或网络。")
     await voice_command.finish(Message(MessageSegment.record(Path(audio).resolve().as_uri())))

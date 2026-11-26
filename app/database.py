@@ -115,5 +115,13 @@ def init_database() -> None:
                 enabled INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS ai_voices (
+                scope_id TEXT PRIMARY KEY,
+                ref_path TEXT NOT NULL,
+                prompt_text TEXT NOT NULL DEFAULT '',
+                engine TEXT NOT NULL DEFAULT 'gpt-sovits',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )

@@ -157,7 +157,7 @@ _SENTENCE_END = re.compile(r"[。！？!?…~～\n]")
 
 
 async def _speak_stream(
-    system_prompt: str, history: list[dict[str, str]], question: str, nickname: str, voice: str
+    system_prompt: str, history: list[dict[str, str]], question: str, nickname: str, voice: str, scope: str = ""
 ) -> tuple[str, bool]:
     """边流式生成边合成：第一句合成好就发出去，不等整段说完。
 
@@ -180,7 +180,7 @@ async def _speak_stream(
             aborted = True  # 模型在解释语音功能，别念出来，交给普通请求重试
             return
         if len(spoken) >= 2:
-            pending.append(asyncio.create_task(synthesize(spoken, voice)))
+            pending.append(asyncio.create_task(synthesize(spoken, voice, scope)))
 
     async def _drain(block: bool) -> None:
         nonlocal sent_any
@@ -273,7 +273,7 @@ async def handle_ai_chat(event: MessageEvent) -> None:
             # 流式：第一句合成好就先发出去，别等整段。
             try:
                 streamed_text, sent_voice = await _speak_stream(
-                    system_prompt, history, question, nickname, get_persona(scope).voice
+                    system_prompt, history, question, nickname, get_persona(scope).voice, scope
                 )
             except Exception as exc:
                 logger.warning(f"[AI] 流式语音失败：{type(exc).__name__}")
@@ -319,7 +319,7 @@ async def handle_ai_chat(event: MessageEvent) -> None:
 
     if reply.voice or want_voice:
         # 要语音就只发语音：先发音频，成功后再 finish；失败才退回文字。
-        audio = await synthesize(reply.text, get_persona(scope).voice)
+        audio = await synthesize(reply.text, get_persona(scope).voice, scope)
         if audio is not None:
             try:
                 await ai_chat.send(Message(MessageSegment.record(_file_uri(audio))))
